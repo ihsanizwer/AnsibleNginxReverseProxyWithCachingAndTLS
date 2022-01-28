@@ -1,0 +1,49 @@
+README
+
+This will give you an idea on how to configure the playbook to run in your environment.
+
+1. ansible.cfg file.
+
+  Here, you need to specify the name of the user that you will be running the user as. This user must be a user with sudo privileges. The next value that needs to be adjusted is the become_ask_pass value. This needs to be changes as per your requirement. You can set it to false if your user can become root without providing password. If password is required to become root, then you need to set this to True.
+
+2. inventory file.
+
+  In this file you need to provide the list of your servers as in the given example. Ensure that you put it under the cache_servers group. You can give the hostname (FQDN) followed by ansible_host = <IP address>. If the FQDN can be resolved from the node you are running the ansible scripts, then it is not neccessary. Note: The same FQDN provided here will be used to set the hostname of the VM and in certificate generation. Therefore, it is important that you set the correct FQDN.
+
+3. group_vars/cache_servers/credentials.yml
+
+  In this file you need to set the crededntials. The same username that you set in the ansible.cfg needs to be provided here. If password based authentication is used, then add a '#' in front of the ansible_ssh_private_key_file and ensure there is no '#' sign in front of 'ansible_ssh_pass' variable. Adding a '#' will conment that line. If keybased authentication is used, then you need to do the exact opposite(comment ansible_ssh_pass and uncomment ansible_ssh_private_key_file and provide the name of the ssh key file. If this key file is not in the md4 directory, then you need to give the absolute path to this file. Do not share/upload this file credentials.yml anywhere for your own safety. You can encrypt this file so that no one can read it if you want using the 'ansible-vault' command. To keep things simple, I didn't encrypt it.
+
+4. group_vars/cache_servers/play_vars.yml
+
+  Here, you need to provide values to multiple variables as per your environment and setup. Most variables are self-explanatory. Some important variables will be discussed here, but you can reach me if you have any doubts about the values/usages
+
+  ntp_server_entries - Here, the default ubuntu ntp server entries are provided, you can change them as you want.
+  cache_dir - name and path of the cache directory. The folder path you give here will be created and used for caching.
+  srv_adm_email - certificates will be generated for this email.
+  mount_for_cache - the cache size will be half of this mount path of the disk.
+  syslog_server - This has been commented as I have no way of testing it. When using it, uncomment and provide syslog server hostname(if it can be resolved only) or IP
+  syslog_port - Uncomment and provide syslog port
+  syslog_severity1 - syslog severity for access log
+  syslog_severity2 - syslog severity for error log
+
+5. templates/nginx_custom.j2
+
+  Add the following two lines in the config file below to send logs to syslog. You can refer the official nginx documentation to change this further as required. You can modify the above syslog configuration as per the documentation in http://nginx.org/en/docs/syslog.html. The below 2 lines should be added ONLY if you set up the variables syslog_server, syslog_port, syslog_severity1 and syslog_severity2 in the previous step. You can add them anywhere inside the server {  } block and outside the location { } block.
+
+access_log syslog:server="{{ syslog_server }}:{{ syslog_port }},severity={{ syslog_severity1 }}"
+error_log syslog:server="{{ syslog_server }}:{{ syslog_port }},severity={{ syslog_severity2  }}"
+
+6. Testing all the configuration
+  
+  Run the below command to check the connectivity. 
+
+  ansible -m ping all
+
+  If the above runs successfully, with a "pong" printed in the result, it means you have configured the credentials successfully. If not, it means you have not setup the IP/hostname/username/password or ssh_keys.
+
+7. Running the playbook.
+
+  To run the playbook, simply run the below command from the md4 directory.
+
+  ansible-playbook playbook.yml

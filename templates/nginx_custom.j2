@@ -1,0 +1,16 @@
+proxy_cache_path "{{ cache_dir }}" keys_zone=cache1:10m max_size="1000m" inactive="{{ cache_ttl }}" use_temp_path=off;
+
+server {
+        listen 80 default;
+        listen [::]:80 default;
+
+        server_name "{{ inventory_hostname }}";
+
+        location / {
+               proxy_pass "{{ proxy_pass }}";
+               proxy_cache cache1;
+               proxy_cache_valid 200 "{{ cache_ttl }}";
+ 
+        }
+
+}

@@ -1,0 +1,29 @@
+---
+
+tzone:  UTC
+username: devopsuser
+swap_location:  /my_sample_swap
+nginx_pkg:  nginx
+cert_pre: 
+- certbot 
+- python3-certbot-nginx
+cache_dir:  /nginx_cache
+nginx_cust_config_file: /etc/nginx/sites-enabled/default
+srv_adm_email:  alpha@protonmail.com
+gen_cert: "sudo certbot run -n --nginx --agree-tos -d {{ inventory_hostname }} -m  {{ srv_adm_email }}  --no-redirect"
+allowed_ssh_host: "sshd: admin.mirrors.gg"
+nginx_svc:  nginx
+ssh_svc:  sshd
+url_to_keys:  https://github.com/<< devopsuser >>.keys
+local_cust_config_file: nginx_custom.j2
+mount_for_cache:  "/mnt"
+
+proxy_pass: "https://covid19-dash-sl.herokuapp.com/"
+cache_ttl:  240m
+
+
+#syslog_server: 
+#syslog_port: 
+#syslog_severity1:  
+#syslog_severity2:  
+

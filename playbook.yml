@@ -1,0 +1,158 @@
+---
+- name: Playbook to setup caching servers with NGINX
+  hosts:  cache_servers
+  serial: 3
+  tasks:
+
+    - name: Create swap ditrectory with a size of two times the size of the ram
+      command:
+        cmd:  "sudo dd if=/dev/zero of={{ swap_location }} bs=1024 count={{ ansible_memtotal_mb*2 }}"
+
+    - name: Set the correct permissions for the swap
+      file:
+        path: "{{ swap_location }}"
+        mode: '0600'
+
+    - name: Enable the newly created swap 
+      shell:
+        cmd:  "sudo mkswap {{  swap_location }}"
+
+    - name: Mount the newly created swap
+      mount:
+        path: "{{ swap_location }}"
+        fstype: swap
+        src:  swap
+        state:  present
+
+    - name: Extend/Add the newly created swap
+      shell:
+        cmd:  "sudo swapon {{ swap_location }}"
+ 
+    - name: Set the hostname of the target servers (based on the inventory file)
+      hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Add the required user to the target servers
+      user:
+        name: "{{ username }}"
+        state:  present
+
+    - name: Grant user super user privileges to the newly added user
+      copy:
+        content:  "{{ username }} ALL=(ALL:ALL) NOPASSWD:ALL"
+        dest: "/etc/sudoers.d/{{ username }}"
+        mode: 0440
+
+    - name: Set authorized keys to the newly user
+      authorized_key:
+        user: "{{ username }}"
+        state:  present
+        key:  "{{ url_to_keys }}"
+
+
+    - name: Install the nginx package on the target servers
+      apt:
+        name: "{{ nginx_pkg }}"
+        state:  latest
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install Certificate prerequisites on the target servers
+      apt:
+        name: "{{ cert_pre }}"
+        state:  latest
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Create the directory required for caching on the target servers
+      file:
+        name: "{{ cache_dir }}"
+        state:  directory
+        mode: '0777'
+
+    - name: Delete the existing nginx custom config file from the target servers
+      file:
+        name: "{{ nginx_cust_config_file }}"
+        state:  absent
+
+    - name: Calculate the space for caching based on the size of the main mount
+      set_fact:
+        main_partition: "{{ (item.size_total/1024/1024)*0.5 }}"
+      when: item.mount  ==  "{{ mount_for_cache }}"
+      with_items: "{{ ansible_mounts }}"
+
+    - name: Copy the nginx custom config file to the target servers
+      template:
+        src:  "{{ local_cust_config_file }}"
+        dest: "{{ nginx_cust_config_file }}"
+        mode: '0777'
+        owner:  root
+        group:  root
+      notify: Restart nginx
+
+    - name: Set the caching maxsize in the copied custom config to be the previously calculated amount 
+      lineinfile:
+        dest: "{{ nginx_cust_config_file }}"
+        regexp: '^proxy_cache_path'
+        line: "proxy_cache_path {{ cache_dir }} keys_zone=cache1:10m max_size={{ main_partition |int }}m inactive={{ cache_ttl }} use_temp_path=off;"
+
+
+
+    - name: Generate and install the certificate for the host (Only works on subdomains. TLDs require setting a challenge)
+      shell:
+        cmd:  "{{ gen_cert }}"
+      notify: Restart nginx
+
+
+    - name: Enable the firewall with a default deny
+      ufw:
+        state: enabled
+        policy: deny
+
+    - name: Allow http(port 80) traffic
+      ufw:
+        rule: allow
+        port: 80
+        proto:  tcp
+      notify: Reload firewall
+
+    - name: Allow https(port 443) traffic
+      ufw:
+        rule: allow
+        port: 443
+        proto:  tcp
+      notify: Reload firewall
+
+    - name: Allow ssh(port 22) traffic
+      ufw:
+        rule: allow
+        port: 22
+        proto:  tcp
+      notify: Reload firewall
+    
+
+    - name: Allow ssh from specific host
+      lineinfile:
+        line:  "{{ allowed_ssh_host }}"
+        path: /etc/hosts.allow
+      notify: Restart ssh
+
+
+  handlers:
+
+   
+    - name: Restart nginx
+      service:
+        name: "{{ nginx_svc }}"
+        state:  restarted
+
+    - name: Reload firewall
+      ufw:
+        state:  reloaded
+      
+    - name: Restart ssh
+      service:
+        name: "{{ ssh_svc }}"
+        state:  restarted
+
+
